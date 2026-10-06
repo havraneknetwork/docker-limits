@@ -1,0 +1,19 @@
+services:
+  limits:
+    build: .
+    container_name: limits
+    restart: unless-stopped
+    ports:
+    - ${LIMITS_BIND_IP:-0.0.0.0}:${LIMITS_HOST_PORT:-8000}:${LIMITS_PORT:-8000}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ${HOST_PROJECTS_DIR:-.}:${HOST_PROJECTS_DIR:-/workspace}:rw
+    env_file:
+    - .env
+    environment:
+    - DOCKER_HOST=unix:///var/run/docker.sock
+    - ALLOWED_HOST_ROOT=${ALLOWED_HOST_ROOT:-${HOST_PROJECTS_DIR:-/workspace}}
+    labels:
+    - app.manageable=true
+    mem_limit: 512m
+    cpus: 1
