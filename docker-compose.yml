@@ -17,3 +17,9 @@ services:
     - app.manageable=true
     mem_limit: 512m
     cpus: 1
+    networks:
+    - proxy-private
+
+networks:
+  proxy-private:
+    external: true
