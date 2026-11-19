@@ -973,17 +973,38 @@ input[type="range"]::-moz-range-thumb {
 
   // ── Initialize Login Screen ───────────────────────────────────
 
+  let currentAuthMode = 'internal';
+
   async function checkExistingSession() {
     try {
       const resp = await fetch('/api/v1/auth/me', { credentials: 'include' });
       if (resp.ok) {
         const data = await resp.json();
+        currentAuthMode = data.auth_mode || 'internal';
         if (data.authenticated) {
           currentUser = data.username || 'admin';
           document.getElementById('login-screen').classList.add('hidden');
           document.getElementById('main-screen').classList.remove('hidden');
           initMainScreen();
           return true;
+        } else if (currentAuthMode === 'authentik') {
+          const form = document.getElementById('login-form');
+          const errEl = document.getElementById('login-error');
+          if (errEl) {
+            errEl.textContent = data.message || 'Přístup vyžaduje přihlášení přes Authentik SSO.';
+            errEl.classList.remove('hidden');
+          }
+          if (form) {
+            clearEl(form);
+            form.appendChild(h('div', { style: 'text-align:center; padding: 1rem 0;' }, [
+              h('p', { style: 'color:var(--text-muted); margin-bottom:1.25rem; font-size:0.9rem;' }, 'Tato aplikace je nakonfigurována pro centrální přihlašování přes Authentik SSO.'),
+              h('a', {
+                href: window.location.href,
+                class: 'btn btn-primary',
+                style: 'display:inline-block; text-decoration:none; padding:0.6rem 1.25rem; border-radius:6px; font-weight:500;'
+              }, 'Znovu ověřit přihlášení')
+            ]));
+          }
         }
       }
     } catch (e) {
@@ -1159,10 +1180,21 @@ input[type="range"]::-moz-range-thumb {
   // ── Logout / Disconnect ───────────────────────────────────────
 
   async function handleDisconnect() {
+    let redirectUrl = null;
     try {
-      await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+      const resp = await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.redirect_url) {
+          redirectUrl = data.redirect_url;
+        }
+      }
     } catch (e) {
       // ignore
+    }
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+      return;
     }
     apiKey = '';
     currentUser = '';

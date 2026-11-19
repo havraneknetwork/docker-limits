@@ -1,4 +1,26 @@
 services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: limits-docker-proxy
+    restart: unless-stopped
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+    - CONTAINERS=1
+    - POST=1
+    - INFO=1
+    - EXEC=0
+    - IMAGES=0
+    - VOLUMES=0
+    - NETWORKS=0
+    - BUILD=0
+    - SYSTEM=0
+    - SECRETS=0
+    mem_limit: 128m
+    cpus: 0.25
+    networks:
+    - proxy-private
+
   limits:
     build: .
     container_name: limits
@@ -6,17 +28,18 @@ services:
     ports:
     - ${LIMITS_BIND_IP:-0.0.0.0}:${LIMITS_HOST_PORT:-8000}:${LIMITS_PORT:-8000}
     volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
     - ${HOST_PROJECTS_DIR:-.}:${HOST_PROJECTS_DIR:-/workspace}:rw
     env_file:
     - .env
     environment:
-    - DOCKER_HOST=unix:///var/run/docker.sock
+    - DOCKER_HOST=tcp://limits-docker-proxy:2375
     - ALLOWED_HOST_ROOT=${ALLOWED_HOST_ROOT:-${HOST_PROJECTS_DIR:-/workspace}}
     labels:
     - app.manageable=true
     mem_limit: 512m
     cpus: 1
+    depends_on:
+    - docker-proxy
     networks:
     - proxy-private
 

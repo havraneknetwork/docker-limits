@@ -21,7 +21,15 @@ from .auth import (
     verify_session_token,
     get_client_ip,
 )
-from .config import SESSION_COOKIE_NAME, SESSION_LIFETIME_HOURS
+from .config import (
+    SESSION_COOKIE_NAME,
+    SESSION_LIFETIME_HOURS,
+    AUTH_PROVIDER,
+    AUTHENTIK_USER_HEADER,
+    AUTHENTIK_GROUPS_HEADER,
+    AUTHENTIK_REQUIRED_GROUP,
+    AUTHENTIK_LOGOUT_URL,
+)
 from .docker_manager import DockerManager
 from .models import (
     ResourceUpdateRequest,
@@ -74,7 +82,14 @@ async def login(req: LoginRequest, request: Request, response: Response):
     """
     Authenticate user with username and password from .env.
     Sets secure HttpOnly session cookie.
+    Disabled when AUTH_PROVIDER == 'authentik'.
     """
+    if AUTH_PROVIDER == "authentik":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nativní přihlašování je zakázáno. Aplikace je nakonfigurována pro centrální přihlašování přes Authentik SSO.",
+        )
+
     client_ip = get_client_ip(request)
     success, err_msg = verify_credentials(req.username, req.password, client_ip)
     if not success:
@@ -111,18 +126,57 @@ async def logout(response: Response):
         key=SESSION_COOKIE_NAME,
         path="/",
     )
-    return {"success": True, "message": "Byli jste úspěšně odhlášeni"}
+    redirect_url = AUTHENTIK_LOGOUT_URL if AUTH_PROVIDER == "authentik" else None
+    return {
+        "success": True,
+        "message": "Byli jste úspěšně odhlášeni",
+        "redirect_url": redirect_url,
+    }
 
 
 @app.get("/api/v1/auth/me", response_model=UserInfoResponse)
 async def get_me(request: Request):
-    """Check current authentication status."""
+    """Check current authentication status and active auth mode."""
+    if AUTH_PROVIDER == "authentik":
+        auth_user = request.headers.get(AUTHENTIK_USER_HEADER)
+        if auth_user and auth_user.strip():
+            if AUTHENTIK_REQUIRED_GROUP:
+                groups_header = request.headers.get(AUTHENTIK_GROUPS_HEADER, "")
+                groups = [g.strip() for g in groups_header.split("|") if g.strip()]
+                if AUTHENTIK_REQUIRED_GROUP not in groups:
+                    return UserInfoResponse(
+                        authenticated=False,
+                        username=None,
+                        auth_mode="authentik",
+                        message=f"Uživatel nemá požadovanou skupinu '{AUTHENTIK_REQUIRED_GROUP}'.",
+                    )
+            return UserInfoResponse(
+                authenticated=True,
+                username=auth_user.strip(),
+                auth_mode="authentik",
+            )
+        return UserInfoResponse(
+            authenticated=False,
+            username=None,
+            auth_mode="authentik",
+            message="Přístup vyžaduje přihlášení přes Authentik SSO.",
+        )
+
+    # Internal mode
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if token:
         payload = verify_session_token(token)
         if payload and payload.get("sub"):
-            return UserInfoResponse(authenticated=True, username=payload["sub"])
-    return UserInfoResponse(authenticated=False, username=None)
+            return UserInfoResponse(
+                authenticated=True,
+                username=payload["sub"],
+                auth_mode="internal",
+            )
+    return UserInfoResponse(
+        authenticated=False,
+        username=None,
+        auth_mode="internal",
+    )
 
 
 # ── List Containers ─────────────────────────────────────────────────────

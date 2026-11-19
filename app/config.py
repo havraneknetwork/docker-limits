@@ -38,6 +38,15 @@ API_KEY = get_api_key()
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin").strip()
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
+# ── Authentication Mode (internal vs authentik) ──────────────────────────
+# Values: 'internal' (built-in username/password) or 'authentik' (Traefik ForwardAuth headers)
+AUTH_PROVIDER = os.environ.get("AUTH_PROVIDER", "internal").strip().lower()
+AUTHENTIK_USER_HEADER = os.environ.get("AUTHENTIK_USER_HEADER", "x-authentik-username").strip().lower()
+AUTHENTIK_EMAIL_HEADER = os.environ.get("AUTHENTIK_EMAIL_HEADER", "x-authentik-email").strip().lower()
+AUTHENTIK_GROUPS_HEADER = os.environ.get("AUTHENTIK_GROUPS_HEADER", "x-authentik-groups").strip().lower()
+AUTHENTIK_REQUIRED_GROUP = os.environ.get("AUTHENTIK_REQUIRED_GROUP", "").strip()
+AUTHENTIK_LOGOUT_URL = os.environ.get("AUTHENTIK_LOGOUT_URL", "https://auth.havraneknetwork.org/flows/-/default/invalidation/").strip()
+
 # ── Session & Security Settings ──────────────────────────────────────────
 def get_session_secret_key() -> str:
     """Resolve session secret key from env, secret file, or generate secure ephemeral."""

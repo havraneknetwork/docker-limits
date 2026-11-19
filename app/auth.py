@@ -27,6 +27,11 @@ from .config import (
     ACCOUNT_LOCKOUT_MINUTES,
     IP_RATE_LIMIT_ATTEMPTS,
     IP_RATE_LIMIT_MINUTES,
+    AUTH_PROVIDER,
+    AUTHENTIK_USER_HEADER,
+    AUTHENTIK_EMAIL_HEADER,
+    AUTHENTIK_GROUPS_HEADER,
+    AUTHENTIK_REQUIRED_GROUP,
 )
 
 logger = logging.getLogger("limits.auth")
@@ -192,18 +197,14 @@ async def verify_auth(
 ) -> str:
     """
     Unified authentication dependency.
-    Accepts either:
-    1. Valid session cookie (from web login)
-    2. Valid X-API-Key header (from automation/curl)
+    If AUTH_PROVIDER == 'authentik':
+        1. Check X-API-Key header (for automated scripts/curl).
+        2. Check Authentik headers (X-authentik-username, and optional group).
+    If AUTH_PROVIDER == 'internal':
+        1. Check Session Cookie.
+        2. Check X-API-Key header.
     """
-    # 1. Check Session Cookie
-    cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
-    if cookie_token:
-        payload = verify_session_token(cookie_token)
-        if payload and payload.get("sub"):
-            return payload["sub"]
-
-    # 2. Check X-API-Key Header
+    # 1. Check X-API-Key Header (always supported for automation)
     if api_key:
         if secrets.compare_digest(api_key, API_KEY):
             return "api-user"
@@ -212,6 +213,32 @@ async def verify_auth(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid API key",
             )
+
+    # 2. Authentik ForwardAuth Mode
+    if AUTH_PROVIDER == "authentik":
+        auth_user = request.headers.get(AUTHENTIK_USER_HEADER)
+        if not auth_user or not auth_user.strip():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized: Chybí autentizace z Authentiku (hlavička X-authentik-username).",
+            )
+
+        if AUTHENTIK_REQUIRED_GROUP:
+            groups_header = request.headers.get(AUTHENTIK_GROUPS_HEADER, "")
+            groups = [g.strip() for g in groups_header.split("|") if g.strip()]
+            if AUTHENTIK_REQUIRED_GROUP not in groups:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Forbidden: Uživatel nemá požadovanou skupinu '{AUTHENTIK_REQUIRED_GROUP}'.",
+                )
+        return auth_user.strip()
+
+    # 3. Internal Mode (Session Cookie)
+    cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if cookie_token:
+        payload = verify_session_token(cookie_token)
+        if payload and payload.get("sub"):
+            return payload["sub"]
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

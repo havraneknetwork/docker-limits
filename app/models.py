@@ -23,6 +23,8 @@ class UserInfoResponse(BaseModel):
     """Information about currently authenticated session user."""
     authenticated: bool
     username: Optional[str] = None
+    auth_mode: str = "internal"
+    message: Optional[str] = None
 
 
 class ResourceUpdateRequest(BaseModel):
