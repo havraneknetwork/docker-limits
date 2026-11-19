@@ -24,6 +24,7 @@ services:
   limits:
     build: .
     container_name: limits
+    user: "1000:1000"
     restart: unless-stopped
     ports:
     - ${LIMITS_BIND_IP:-0.0.0.0}:${LIMITS_HOST_PORT:-8000}:${LIMITS_PORT:-8000}
